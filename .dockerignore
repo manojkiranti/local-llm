@@ -1,0 +1,39 @@
+# Virtual environments
+.venv/
+venv/
+.ragvenv/
+
+# Environment / secrets
+.env
+.env.*
+
+# Python bytecode
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+
+# Qdrant local data
+qdrant_data/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Git
+.git/
+.gitignore
+
+# Docker
+Dockerfile
+docker-compose.yml
+
+# Misc
+processed_files.txt
+README.MD

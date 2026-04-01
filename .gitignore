@@ -1,0 +1,29 @@
+# Environment / secrets
+.env
+.env.*
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+.dilocal/
+dilocal
+
+# Qdrant local data
+qdrant_data/
+
+# Processed files tracker
+processed_files.txt
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
