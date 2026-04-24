@@ -83,6 +83,12 @@ class ScrapeResponse(BaseModel):
     task_id: str
 
 
+class ExtractResponse(BaseModel):
+    instruction: str
+    filename: str
+    answer: str
+
+
 class ComponentHealth(BaseModel):
     status: Literal["ok", "error"]
     detail: str

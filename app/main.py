@@ -9,6 +9,7 @@ from fastapi.responses import JSONResponse
 
 from app.api.routes.chat import router as chat_router
 from app.api.routes.documents import router as documents_router
+from app.api.routes.extract import router as extract_router
 from app.api.routes.health import router as health_router
 from app.api.routes.scraper import router as scraper_router
 from app.config import configure_logging, get_settings
@@ -66,4 +67,5 @@ async def unhandled_exception_handler(_: Request, exc: Exception) -> JSONRespons
 app.include_router(health_router)
 app.include_router(chat_router)
 app.include_router(documents_router)
+app.include_router(extract_router)
 app.include_router(scraper_router)

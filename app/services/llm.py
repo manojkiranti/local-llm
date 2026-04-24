@@ -54,7 +54,7 @@ class LLMService:
                 {"role": "user", "content": user_prompt},
             ],
             temperature=0.3,
-            max_tokens=2048,
+            max_tokens=512,
             stream=False,
         )
 
@@ -118,6 +118,43 @@ QUESTION:
 ANSWER:"""
 
         return system_prompt, user_prompt
+
+    def generate_from_document(self, instruction: str, document_text: str) -> str:
+        is_nepali = bool(DEVANAGARI_PATTERN.search(instruction))
+
+        system_prompt = (
+            "You are a document processing assistant. "
+            "You will be given the full text of a document and an instruction. "
+            "Follow the instruction precisely using ONLY the provided document text. "
+            "If the instruction is in Nepali, answer in Nepali. "
+            "Structure your response clearly with bullet points or headings when appropriate."
+        )
+
+        user_prompt = f"""DOCUMENT:
+{document_text}
+
+INSTRUCTION:
+{instruction}
+
+ANSWER:"""
+
+        response = self.client.chat.completions.create(
+            model=self.settings.LLM_MODEL,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+            temperature=0.3,
+            max_tokens=2048,
+            stream=False,
+        )
+
+        answer = (response.choices[0].message.content or "").strip()
+        if not answer:
+            if is_nepali:
+                return "कागजातबाट अनुरोध गरिएको जानकारी निकाल्न सकिएन।"
+            return "Could not extract the requested information from the document."
+        return answer
 
     def close(self) -> None:
         self.client.close()

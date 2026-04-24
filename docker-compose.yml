@@ -11,6 +11,7 @@ services:
       - LLM_BASE_URL=http://ollama:11434/v1
     volumes:
       - ./download:/app/download
+      - hf_cache:/root/.cache/huggingface  # persist embedding model — avoids re-download on container restart
     depends_on:
       qdrant:
         condition: service_healthy
@@ -41,14 +42,16 @@ services:
       test: ["CMD", "bash", "-c", "cat < /dev/null > /dev/tcp/localhost/11434"]
       interval: 5s
       retries: 10
-    # Uncomment below for GPU support (requires nvidia-container-toolkit)
-    # deploy:
-    #   resources:
-    #     reservations:
-    #       devices:
-    #         - driver: nvidia
-    #           count: all
-    #           capabilities: [gpu]
+    # GPU support: passes all available NVIDIA GPUs to the Ollama container.
+    # Requires nvidia-container-toolkit installed on the host.
+    # To disable GPU, remove or comment out this entire deploy block.
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all       # use all available GPUs; change to e.g. count: 1 to limit
+              capabilities: [gpu]
 
   ollama-pull:
     image: ollama/ollama:latest
@@ -62,3 +65,4 @@ services:
 volumes:
   qdrant_data:
   ollama_data:
+  hf_cache:

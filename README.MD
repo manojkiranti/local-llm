@@ -34,6 +34,9 @@ FastAPI backend for document ingestion, embedding, retrieval, and answer generat
 - `GET /documents/{doc_id}` — get a single embedded document
 - `DELETE /documents/{doc_id}` — delete embedded document (removes from Qdrant + Postgres)
 
+### Document Extract
+- `POST /extract` — upload a document + instruction, extracts text and uses LLM to return the requested data (no vector DB, works directly on the uploaded file)
+
 ### Scraper
 - `POST /scraper/scrape` — scrape and download notices
 - `GET /scraper/notices` — list downloaded notices
