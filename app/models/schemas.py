@@ -89,6 +89,16 @@ class ExtractResponse(BaseModel):
     answer: str
 
 
+class ProcessTextRequest(BaseModel):
+    content: str = Field(..., min_length=1, description="Raw text content to process")
+    instruction: str = Field(..., min_length=1, description="What the LLM should do with the content")
+
+
+class ProcessTextResponse(BaseModel):
+    instruction: str
+    answer: str
+
+
 class ComponentHealth(BaseModel):
     status: Literal["ok", "error"]
     detail: str

@@ -36,6 +36,26 @@ FastAPI backend for document ingestion, embedding, retrieval, and answer generat
 
 ### Document Extract
 - `POST /extract` — upload a document + instruction, extracts text and uses LLM to return the requested data (no vector DB, works directly on the uploaded file)
+- `POST /process-text` — send raw text content + instruction, LLM processes it directly (no vector DB, no file upload)
+
+**Example — `/extract` (file upload):**
+
+```bash
+curl -X POST http://localhost:8000/extract \
+  -F "file=@document.pdf" \
+  -F "instruction=Extract all key dates and deadlines mentioned in this document"
+```
+
+**Example — `/process-text` (raw text):**
+
+```bash
+curl -X POST http://localhost:8000/process-text \
+  -H "Content-Type: application/json" \
+  -d '{
+    "content": "Invoice #1234 dated 2026-05-10 from ACME Corp for $1,200. Due: 2026-06-10.",
+    "instruction": "Extract the invoice number, vendor, amount, and due date as JSON"
+  }'
+```
 
 ### Scraper
 - `POST /scraper/scrape` — scrape and download notices

@@ -6,7 +6,7 @@ from pathlib import Path
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 
-from app.models.schemas import ExtractResponse
+from app.models.schemas import ExtractResponse, ProcessTextRequest, ProcessTextResponse
 from app.services.embedding import SUPPORTED_EXTS, extract_text, normalize_text
 from app.services.llm import get_llm_service
 
@@ -54,5 +54,23 @@ def extract_from_document(
     return ExtractResponse(
         instruction=instruction,
         filename=file.filename or "unknown",
+        answer=answer,
+    )
+
+
+@router.post("/process-text", response_model=ProcessTextResponse)
+def process_text(request: ProcessTextRequest) -> ProcessTextResponse:
+    try:
+        llm_service = get_llm_service()
+        answer = llm_service.generate_from_document(
+            instruction=request.instruction,
+            document_text=request.content,
+        )
+    except Exception as exc:
+        logger.exception("LLM generation failed: %s", exc)
+        raise HTTPException(status_code=500, detail="Failed to process content with LLM.") from exc
+
+    return ProcessTextResponse(
+        instruction=request.instruction,
         answer=answer,
     )
