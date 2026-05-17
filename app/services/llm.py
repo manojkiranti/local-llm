@@ -12,6 +12,15 @@ from app.models.schemas import RetrievedChunk
 logger = logging.getLogger(__name__)
 
 DEVANAGARI_PATTERN = re.compile(r"[\u0900-\u097F]")
+CODE_FENCE_PATTERN = re.compile(r"^```(?:json|JSON)?\s*\n?(.*?)\n?```\s*$", re.DOTALL)
+
+
+def _strip_code_fences(text: str) -> str:
+    stripped = text.strip()
+    match = CODE_FENCE_PATTERN.match(stripped)
+    if match:
+        return match.group(1).strip()
+    return stripped
 
 
 class LLMService:
@@ -124,19 +133,25 @@ ANSWER:"""
 
         system_prompt = (
             "You are a document processing assistant. "
-            "You will be given the full text of a document and an instruction. "
-            "Follow the instruction precisely using ONLY the provided document text. "
-            "If the instruction is in Nepali, answer in Nepali. "
-            "Structure your response clearly with bullet points or headings when appropriate."
+            "You will be given the full text of a document/content and an instruction. "
+            "Follow the instruction EXACTLY using ONLY the provided content. Do not use outside knowledge. "
+            "Respect the output format requested in the instruction: "
+            "if asked for JSON, return only valid JSON with no prose, markdown fences, or commentary; "
+            "if asked for a table, return a table; "
+            "if asked for a list, return a list; "
+            "if asked for plain text or a summary, return that. "
+            "If no format is specified, return a clear, concise plain-text answer. "
+            "If the instruction is in Nepali, answer in Nepali (unless a structured format like JSON is requested, in which case keep keys in English and values in the source language). "
+            "Do not wrap your response in code fences unless explicitly asked."
         )
 
-        user_prompt = f"""DOCUMENT:
+        user_prompt = f"""CONTENT:
 {document_text}
 
 INSTRUCTION:
 {instruction}
 
-ANSWER:"""
+OUTPUT:"""
 
         response = self.client.chat.completions.create(
             model=self.settings.LLM_MODEL,
@@ -154,6 +169,9 @@ ANSWER:"""
             if is_nepali:
                 return "कागजातबाट अनुरोध गरिएको जानकारी निकाल्न सकिएन।"
             return "Could not extract the requested information from the document."
+
+        if re.search(r"\bjson\b", instruction, re.IGNORECASE):
+            answer = _strip_code_fences(answer)
         return answer
 
     def close(self) -> None:
