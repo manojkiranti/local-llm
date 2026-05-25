@@ -100,7 +100,7 @@ def normalize_text(raw: str) -> str:
 
 # ── Chunking ─────────────────────────────────────────────────────────
 
-def chunk_text(path: Path, text: str) -> list[dict]:
+def chunk_text(path: Path, text: str, group_name: str | None = None) -> list[dict]:
     settings = get_settings()
     splitter = RecursiveCharacterTextSplitter(
         chunk_size=settings.CHUNK_SIZE,
@@ -114,15 +114,18 @@ def chunk_text(path: Path, text: str) -> list[dict]:
         cleaned = chunk.strip()
         if len(cleaned) < 30:
             continue
+        metadata = {
+            "source": str(path),
+            "filename": path.name,
+            "chunk_index": i,
+            "total_chunks": len(chunks),
+        }
+        if group_name:
+            metadata["group_name"] = group_name
         docs.append({
             "id": str(uuid.uuid5(uuid.NAMESPACE_URL, f"{path.as_posix()}::{i}")),
             "text": cleaned,
-            "metadata": {
-                "source": str(path),
-                "filename": path.name,
-                "chunk_index": i,
-                "total_chunks": len(chunks),
-            },
+            "metadata": metadata,
         })
     return docs
 
@@ -134,22 +137,36 @@ def _get_processed_set(db: Session) -> set[str]:
     return {r[0] for r in rows}
 
 
-def _upsert_processed(db: Session, filepath: str, filename: str, ext: str, chunk_count: int):
+def _upsert_processed(
+    db: Session,
+    filepath: str,
+    filename: str,
+    ext: str,
+    chunk_count: int,
+    group_name: str | None = None,
+):
     existing = db.query(EmbeddedFile).filter_by(filepath=filepath).first()
     if existing:
         existing.chunk_count = chunk_count
+        if group_name is not None:
+            existing.group_name = group_name
     else:
         db.add(EmbeddedFile(
             filepath=filepath, filename=filename,
             extension=ext, chunk_count=chunk_count,
+            group_name=group_name,
         ))
     db.commit()
 
 
-def run_embed_pipeline(filepaths: list[str] | None = None) -> dict:
+def run_embed_pipeline(
+    filepaths: list[str] | None = None,
+    group_name: str | None = None,
+) -> dict:
     """
     Embed documents and upsert into Qdrant.
     If filepaths is empty/None, processes all new files in DOCS_DIR.
+    group_name tags every chunk's payload + the EmbeddedFile row for scoped retrieval.
     Returns a summary dict.
     """
     settings = get_settings()
@@ -191,7 +208,7 @@ def run_embed_pipeline(filepaths: list[str] | None = None) -> dict:
                 logger.info("SKIP  %s  -> empty after normalization", path)
                 continue
 
-            docs = chunk_text(path, text)
+            docs = chunk_text(path, text, group_name=group_name)
             if not docs:
                 logger.info("SKIP  %s  -> no usable chunks", path)
                 continue
@@ -243,7 +260,10 @@ def run_embed_pipeline(filepaths: list[str] | None = None) -> dict:
         # Mark as processed in Postgres
         file_names = []
         for path, count in processed_paths:
-            _upsert_processed(db, str(path), path.name, path.suffix.lower(), count)
+            _upsert_processed(
+                db, str(path), path.name, path.suffix.lower(), count,
+                group_name=group_name,
+            )
             file_names.append(path.name)
 
         logger.info("Indexed %d chunks from %d files", len(points), len(processed_paths))

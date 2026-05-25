@@ -2,10 +2,23 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import DateTime, Integer, String, func
+from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.postgres import Base
+
+
+class DocumentGroup(Base):
+    __tablename__ = "document_groups"
+
+    name: Mapped[str] = mapped_column(String, primary_key=True)
+    description: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
 
 
 class EmbeddedFile(Base):
@@ -16,6 +29,10 @@ class EmbeddedFile(Base):
     filename: Mapped[str] = mapped_column(String, nullable=False)
     extension: Mapped[str | None] = mapped_column(String, nullable=True)
     chunk_count: Mapped[int] = mapped_column(Integer, default=0)
+    group_name: Mapped[str | None] = mapped_column(
+        String, ForeignKey("document_groups.name", ondelete="SET NULL"),
+        nullable=True, index=True,
+    )
     processed_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

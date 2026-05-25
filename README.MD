@@ -61,6 +61,20 @@ curl -X POST http://localhost:8000/process-text \
 - `POST /scraper/scrape` — scrape and download notices
 - `GET /scraper/notices` — list downloaded notices
 
+### Document Groups & Verification
+Group reference documents under a named index and verify a new document against just that group.
+
+- `POST /groups` — create a group `{name, description}`
+- `GET /groups` — list groups + document counts
+- `GET /groups/{name}` — group details
+- `PATCH /groups/{name}` — update description
+- `DELETE /groups/{name}` — delete group, its records, and Qdrant points
+- `POST /groups/{name}/verify` — upload a new document + instruction, return a structured JSON report (`satisfied` / `missing` / `unclear` / `summary`)
+- `POST /documents/files/upload` and `POST /documents/embed` accept optional `group_name`
+- `POST /ask` and `GET /search` accept optional `group_name` to scope retrieval
+
+See [`docs/GROUPS.md`](docs/GROUPS.md) for the full walkthrough and migration notes.
+
 ---
 
 ## Configuration

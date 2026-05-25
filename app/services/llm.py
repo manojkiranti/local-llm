@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import logging
 import re
 from functools import lru_cache
@@ -174,8 +175,122 @@ OUTPUT:"""
             answer = _strip_code_fences(answer)
         return answer
 
+    def verify_document(
+        self,
+        group_description: str,
+        instruction: str,
+        reference_chunks: list[RetrievedChunk],
+        target_text: str,
+    ) -> dict:
+        """
+        Compare a target document against reference chunks pulled from a group index
+        and return a structured verification report.
+        Response shape: {satisfied: [...], missing: [...], unclear: [...], summary: "..."}
+        Each list item is {"requirement": str, "evidence": str | null}.
+        """
+        context_blocks: list[str] = []
+        for idx, chunk in enumerate(reference_chunks, start=1):
+            source = chunk.file_name or chunk.source or "unknown"
+            context_blocks.append(f"[{idx}] file={source}\n{chunk.text}")
+        context_text = "\n\n".join(context_blocks) if context_blocks else "(no reference context retrieved)"
+
+        system_prompt = (
+            "You are a compliance verification assistant. "
+            "You are given (1) a group description explaining the domain, "
+            "(2) the user's verification instruction, "
+            "(3) REFERENCE CONTEXT taken from a curated set of reference documents, and "
+            "(4) the full text of a TARGET document to be verified. "
+            "Compare the target document against the requirements implied by the reference "
+            "context and the user's instruction.\n\n"
+            "Return ONLY valid JSON with this exact shape and no commentary, markdown, or code fences:\n"
+            '{\n'
+            '  "satisfied": [{"requirement": "...", "evidence": "quoted snippet from target"}],\n'
+            '  "missing":   [{"requirement": "...", "evidence": null}],\n'
+            '  "unclear":   [{"requirement": "...", "evidence": "why it is unclear"}],\n'
+            '  "summary": "one or two sentence overall verdict"\n'
+            '}\n'
+            "Rules:\n"
+            "- Ground every requirement in the REFERENCE CONTEXT or the user's instruction. "
+            "Do not invent rules from outside knowledge.\n"
+            "- Quote evidence verbatim from the TARGET document when satisfied.\n"
+            "- If the target text is empty or unreadable, return empty arrays and explain in summary.\n"
+            "- Keep keys exactly as shown (English keys). Values can be in the source language."
+        )
+
+        user_prompt = (
+            f"GROUP DESCRIPTION:\n{group_description or '(no description provided)'}\n\n"
+            f"INSTRUCTION:\n{instruction}\n\n"
+            f"REFERENCE CONTEXT:\n{context_text}\n\n"
+            f"TARGET DOCUMENT:\n{target_text}\n\n"
+            "OUTPUT:"
+        )
+
+        response = self.client.chat.completions.create(
+            model=self.settings.LLM_MODEL,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+            temperature=0.2,
+            max_tokens=2048,
+            stream=False,
+        )
+
+        raw = (response.choices[0].message.content or "").strip()
+        raw = _strip_code_fences(raw)
+
+        try:
+            data = json.loads(raw)
+        except json.JSONDecodeError:
+            logger.warning("Verification LLM returned non-JSON: %s", raw[:500])
+            return {
+                "satisfied": [],
+                "missing": [],
+                "unclear": [],
+                "summary": (
+                    "Could not parse a structured report from the model. Raw output: "
+                    + raw[:1000]
+                ),
+            }
+
+        return _normalize_verify_payload(data)
+
     def close(self) -> None:
         self.client.close()
+
+
+def _normalize_verify_payload(data: dict) -> dict:
+    """Coerce the LLM payload into the documented shape with item dicts."""
+    def _coerce_list(value) -> list[dict]:
+        out: list[dict] = []
+        if not isinstance(value, list):
+            return out
+        for item in value:
+            if isinstance(item, dict):
+                requirement = str(item.get("requirement") or item.get("name") or "").strip()
+                evidence = item.get("evidence")
+                if isinstance(evidence, str):
+                    evidence = evidence.strip() or None
+                else:
+                    evidence = None
+                if requirement:
+                    out.append({"requirement": requirement, "evidence": evidence})
+            elif isinstance(item, str):
+                requirement = item.strip()
+                if requirement:
+                    out.append({"requirement": requirement, "evidence": None})
+        return out
+
+    summary = data.get("summary")
+    if not isinstance(summary, str):
+        summary = ""
+
+    return {
+        "satisfied": _coerce_list(data.get("satisfied")),
+        "missing": _coerce_list(data.get("missing")),
+        "unclear": _coerce_list(data.get("unclear")),
+        "summary": summary.strip(),
+    }
 
 
 @lru_cache(maxsize=1)

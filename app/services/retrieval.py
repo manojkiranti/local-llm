@@ -9,7 +9,7 @@ from qdrant_client.models import ScoredPoint
 from sentence_transformers import SentenceTransformer
 
 from app.config import get_settings
-from app.db.qdrant import get_qdrant_client
+from app.db.qdrant import build_group_filter, get_qdrant_client
 from app.models.schemas import RetrievedChunk
 
 logger = logging.getLogger(__name__)
@@ -52,6 +52,7 @@ class RetrievalService:
         query: str,
         top_k: int | None = None,
         score_threshold: float | None = None,
+        group_name: str | None = None,
     ) -> list[RetrievedChunk]:
         safe_top_k = top_k or self.settings.DEFAULT_TOP_K
         safe_top_k = min(max(safe_top_k, 1), self.settings.MAX_TOP_K)
@@ -76,6 +77,10 @@ class RetrievalService:
 
         if score_threshold is not None:
             search_kwargs["score_threshold"] = score_threshold
+
+        group_filter = build_group_filter(group_name)
+        if group_filter is not None:
+            search_kwargs["query_filter"] = group_filter
 
         result = self.client.query_points(**search_kwargs)
         points = result.points

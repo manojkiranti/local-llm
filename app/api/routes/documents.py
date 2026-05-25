@@ -6,13 +6,13 @@ import shutil
 import uuid
 from pathlib import Path
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, UploadFile, File
+from fastapi import APIRouter, BackgroundTasks, Depends, Form, HTTPException, Query, UploadFile, File
 from sqlalchemy.orm import Session
 
 from app.db.postgres import get_db
 from app.db.qdrant import get_qdrant_client
 from app.config import get_settings
-from app.models.database import EmbeddedFile
+from app.models.database import DocumentGroup, EmbeddedFile
 from app.models.schemas import EmbedRequest, EmbedResponse, EmbeddedFileOut
 from app.services.embedding import run_embed_pipeline, SUPPORTED_EXTS
 
@@ -34,8 +34,23 @@ def _get_docs_dir() -> Path:
 
 
 @router.post("/files/upload")
-async def upload_files(files: list[UploadFile] = File(...)):
-    """Upload one or more files to the documents folder."""
+async def upload_files(
+    files: list[UploadFile] = File(...),
+    group_name: str | None = Form(default=None),
+    db: Session = Depends(get_db),
+):
+    """Upload one or more files to the documents folder.
+    Optional `group_name` is validated but not yet persisted here — pass it again
+    to `/documents/embed` to tag the chunks under that group.
+    """
+    if group_name:
+        exists = db.query(DocumentGroup).filter_by(name=group_name).first()
+        if not exists:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Group '{group_name}' does not exist. Create it via POST /groups.",
+            )
+
     docs_dir = _get_docs_dir()
     uploaded = []
     errors = []
@@ -56,7 +71,7 @@ async def upload_files(files: list[UploadFile] = File(...)):
         finally:
             await file.close()
 
-    return {"uploaded": uploaded, "errors": errors}
+    return {"uploaded": uploaded, "errors": errors, "group_name": group_name}
 
 
 @router.get("/files")
@@ -92,10 +107,10 @@ def delete_file(filename: str):
     return {"message": f"Deleted file: {filename}"}
 
 
-def _run_embed_task(task_id: str, filepaths: list[str]):
+def _run_embed_task(task_id: str, filepaths: list[str], group_name: str | None):
     _task_status[task_id] = {"status": "running"}
     try:
-        result = run_embed_pipeline(filepaths or None)
+        result = run_embed_pipeline(filepaths or None, group_name=group_name)
         _task_status[task_id] = result
     except Exception as exc:
         logger.exception("Embed task %s failed: %s", task_id, exc)
@@ -106,11 +121,22 @@ def _run_embed_task(task_id: str, filepaths: list[str]):
 def embed_documents(
     request: EmbedRequest,
     background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
 ):
-    """Trigger document embedding as a background task."""
+    """Trigger document embedding as a background task. Optionally scoped to a group."""
+    if request.group_name:
+        exists = db.query(DocumentGroup).filter_by(name=request.group_name).first()
+        if not exists:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Group '{request.group_name}' does not exist. Create it via POST /groups.",
+            )
+
     task_id = str(uuid.uuid4())
     _task_status[task_id] = {"status": "queued"}
-    background_tasks.add_task(_run_embed_task, task_id, request.filepaths)
+    background_tasks.add_task(
+        _run_embed_task, task_id, request.filepaths, request.group_name
+    )
     return EmbedResponse(
         message="Embedding started in background",
         task_id=task_id,

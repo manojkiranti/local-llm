@@ -39,7 +39,11 @@ def get_db():
 
 def init_db() -> None:
     """Create all tables."""
-    from app.models.database import DownloadedNotice, EmbeddedFile  # noqa: F401
+    from app.models.database import (  # noqa: F401
+        DocumentGroup,
+        DownloadedNotice,
+        EmbeddedFile,
+    )
 
     Base.metadata.create_all(bind=get_engine())
 

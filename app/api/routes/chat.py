@@ -27,6 +27,7 @@ def ask_question(request: AskRequest) -> AskResponse:
             query=request.question,
             top_k=top_k,
             score_threshold=request.score_threshold,
+            group_name=request.group_name,
         )
 
         fallback_message = llm_service.get_fallback_message(request.question)
@@ -74,6 +75,10 @@ def semantic_search(
         le=1.0,
         description="Optional minimum similarity score",
     ),
+    group_name: str | None = Query(
+        default=None,
+        description="Optional group/index name to scope retrieval to",
+    ),
 ) -> SearchResponse:
     settings = get_settings()
     retrieval_service = get_retrieval_service()
@@ -85,6 +90,7 @@ def semantic_search(
             query=query,
             top_k=safe_top_k,
             score_threshold=score_threshold,
+            group_name=group_name,
         )
         return SearchResponse(
             query=query,
